@@ -1,8 +1,17 @@
 """Configuration loaded from .env and environment variables."""
 
+import os
 from pathlib import Path
 
+from dotenv import load_dotenv
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+# Push .env into os.environ so third-party libraries that read directly from
+# the environment (notably fal_client, which looks up FAL_KEY) see the values.
+# pydantic-settings reads .env into the Settings object but doesn't propagate
+# to os.environ.
+load_dotenv()
 
 
 class Settings(BaseSettings):
@@ -33,3 +42,10 @@ class Settings(BaseSettings):
 
 
 settings = Settings()
+
+# Belt-and-braces: if .env wasn't found by load_dotenv (e.g. running from a
+# different cwd), still ensure the keys we know about reach os.environ.
+if settings.fal_key and not os.environ.get("FAL_KEY"):
+    os.environ["FAL_KEY"] = settings.fal_key
+if settings.anthropic_api_key and not os.environ.get("ANTHROPIC_API_KEY"):
+    os.environ["ANTHROPIC_API_KEY"] = settings.anthropic_api_key
