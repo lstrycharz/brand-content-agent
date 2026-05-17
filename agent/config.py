@@ -17,7 +17,7 @@ class Settings(BaseSettings):
     seed_topics_path: Path = Path("data/seed_topics.csv")
     run_log_path: Path = Path("RUN_LOG.md")
 
-    drafting_model: str = "claude-3-5-sonnet-20241022"
+    drafting_model: str = "claude-sonnet-4-6"
     target_word_count: int = 1200
     word_count_min: int = 1000
     word_count_max: int = 1400
