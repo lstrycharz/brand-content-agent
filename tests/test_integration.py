@@ -68,12 +68,42 @@ def _fake_outline(topic_title: str) -> dict:
     }
 
 
-def _fake_markdown(topic_title: str) -> str:
-    body = "# " + topic_title.title() + "\n\n"
-    body += "## Background\n\n" + ("Lorem ipsum dolor sit amet. " * 80) + "\n\n"
-    body += "## Details\n\n" + ("Consectetur adipiscing elit. " * 80) + "\n\n"
-    body += "## Takeaways\n\n" + ("Sed do eiusmod tempor. " * 40)
+def _fake_markdown(topic_title: str, keyword: str) -> str:
+    """Realistic-shape Markdown sized to ~1200 words to pass quality checks."""
+    h1 = f"# {topic_title}: A Guide to {keyword.title()}\n\n"
+    intro = f"{keyword.capitalize()} affects many people. This guide explains it. "
+    intro_words = len(intro.split())
+    h1_words = len(h1.split())
+    h2_overhead = 6  # three "## Heading\n\n" sections
+    target = 1200
+    filler_target = target - h1_words - h2_overhead - intro_words * 4
+    per_section = max(50, filler_target // 3)
+    sentence = f"This explains {keyword} clearly. "
+    sentence_words = len(sentence.split())
+    repeats = max(1, per_section // sentence_words)
+
+    body = h1 + intro * 4 + "\n\n"
+    body += "## Background\n\n" + (sentence * repeats) + "\n\n"
+    body += "## Details\n\n" + (sentence * repeats) + "\n\n"
+    body += "## Takeaways\n\n" + (sentence * repeats)
     return body
+
+
+def _llm_eval_patches():
+    """Patch tone + hallucination evaluators to return pass-grade results."""
+    from unittest.mock import patch as _patch
+
+    from agent.stages import quality
+
+    tone_p = _patch.object(
+        quality, "_call_claude_for_tone_eval",
+        return_value={"score": 4.5, "feedback": ""},
+    )
+    halluc_p = _patch.object(
+        quality, "_call_claude_for_hallucination_check",
+        return_value={"passed": True, "unsupported_claims": []},
+    )
+    return tone_p, halluc_p
 
 
 class TestFiveSuccessiveRuns:
@@ -81,6 +111,7 @@ class TestFiveSuccessiveRuns:
         from agent import runner
         from agent.stages import draft, outline, research
 
+        tone_p, halluc_p = _llm_eval_patches()
         with patch.object(research, "_call_claude_with_search",
                           side_effect=lambda *, topic: _fake_findings(topic.title)), \
              patch.object(outline, "_call_claude_for_outline",
@@ -88,7 +119,9 @@ class TestFiveSuccessiveRuns:
                           _fake_outline(topic.title)), \
              patch.object(draft, "_call_claude_for_draft",
                           side_effect=lambda *, topic, research, outline,
-                          brand_voice, feedback: _fake_markdown(topic.title)):
+                          brand_voice, feedback:
+                          _fake_markdown(topic.title, topic.keyword)), \
+             tone_p, halluc_p:
             results = [runner.run_once() for _ in range(5)]
 
         # All runs succeeded with distinct run_ids and output files
@@ -106,6 +139,7 @@ class TestFiveSuccessiveRuns:
         from agent import runner
         from agent.stages import draft, outline, research
 
+        tone_p, halluc_p = _llm_eval_patches()
         with patch.object(research, "_call_claude_with_search",
                           side_effect=lambda *, topic: _fake_findings(topic.title)), \
              patch.object(outline, "_call_claude_for_outline",
@@ -113,7 +147,9 @@ class TestFiveSuccessiveRuns:
                           _fake_outline(topic.title)), \
              patch.object(draft, "_call_claude_for_draft",
                           side_effect=lambda *, topic, research, outline,
-                          brand_voice, feedback: _fake_markdown(topic.title)):
+                          brand_voice, feedback:
+                          _fake_markdown(topic.title, topic.keyword)), \
+             tone_p, halluc_p:
             runner.run_once()
             runner.run_once()
 

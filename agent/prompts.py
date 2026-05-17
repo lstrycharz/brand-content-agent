@@ -79,6 +79,47 @@ Rules:
 - Return ONLY the Markdown article (no commentary, no frontmatter)."""
 
 
+def tone_eval_system_prompt(brand_voice: dict[str, Any]) -> str:
+    voice_json = json.dumps(brand_voice, indent=2)
+    return f"""You are a brand-voice auditor.
+
+Brand voice profile:
+{voice_json}
+
+Score how well a draft matches this brand voice. Return ONLY JSON:
+{{"score": <0.0-5.0>, "feedback": "<one specific fix if score < 3.5, else empty>"}}"""
+
+
+def tone_eval_user_prompt(*, draft: str) -> str:
+    return f"Evaluate the tone of this draft:\n\n---\n{draft}\n---"
+
+
+def hallucination_system_prompt() -> str:
+    return """You are a fact-checker. The author wrote a blog article using only
+the research findings provided. Identify any factual claims in the article that
+are NOT supported by the research.
+
+Be strict about specific numbers, percentages, study results, and named studies.
+General domain knowledge (e.g., "skin produces sebum") is fine without a source.
+
+Return ONLY JSON:
+{
+  "passed": <true if every specific claim is supported, false otherwise>,
+  "unsupported_claims": ["<verbatim or paraphrased unsupported claim>", ...]
+}"""
+
+
+def hallucination_user_prompt(*, draft: str, research: dict[str, Any]) -> str:
+    research_json = json.dumps(research, indent=2)
+    return f"""Research findings (the only acceptable sources):
+{research_json}
+
+Article to fact-check:
+---
+{draft}
+---"""
+
+
 def draft_user_prompt(
     *,
     topic_title: str,

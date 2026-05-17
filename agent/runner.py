@@ -17,7 +17,14 @@ from sqlmodel import select
 from agent.config import settings
 from agent.db import Run, Topic, session_scope, utcnow
 from agent.progress import bus
-from agent.stages import draft, init, outline, research
+from agent.stages import draft, init, outline, quality, research
+
+
+class QualityRetryExhausted(RuntimeError):
+    """Raised when the draft fails quality checks even after a retry."""
+
+
+MAX_DRAFT_ATTEMPTS = 2  # initial + 1 retry
 
 
 DEFAULT_BRAND_VOICE: dict[str, Any] = {
@@ -48,16 +55,25 @@ def run_once(topic_id: int | None = None) -> dict[str, Any]:
         findings = research.run(topic=topic, run_id=run_id)
 
         _mark_stage(run_id, "outline")
+        brand_voice = _load_brand_voice()
         outline_result = outline.run(
             topic=topic, research=findings,
-            brand_voice=_load_brand_voice(), run_id=run_id,
+            brand_voice=brand_voice, run_id=run_id,
         )
 
-        _mark_stage(run_id, "draft")
-        draft_result = draft.run(
-            topic=topic, research=findings, outline=outline_result,
-            brand_voice=_load_brand_voice(), run_id=run_id, feedback=None,
+        draft_result, report, retry_count = _draft_with_retry(
+            topic=topic, research=findings, outline_result=outline_result,
+            brand_voice=brand_voice, run_id=run_id,
         )
+
+        if not report.passed:
+            _mark_topic_failed_review(topic.id)
+            _finish_run(run_id, status="failed",
+                        error_message=f"quality failed: {report.feedback}")
+            bus.emit(run_id, "error",
+                     "Quality checks failed after retry — topic queued for review.",
+                     level="error")
+            raise QualityRetryExhausted(report.feedback or "quality check failed")
 
         output_path = _write_draft(
             slug=draft_result["slug"], markdown=draft_result["markdown"],
@@ -71,12 +87,54 @@ def run_once(topic_id: int | None = None) -> dict[str, Any]:
             "topic_title": topic.title,
             "word_count": draft_result["word_count"],
             "output_file": str(output_path),
+            "tone_score": report.tone_score,
+            "seo_score": report.seo_score,
+            "retry_count": retry_count,
             "status": "success",
         }
+    except QualityRetryExhausted:
+        raise
     except Exception as exc:
         _finish_run(run_id, status="failed", error_message=str(exc))
         bus.emit(run_id, "error", f"Run failed: {exc}", level="error")
         raise
+
+
+def _draft_with_retry(
+    *,
+    topic: Topic,
+    research: dict,
+    outline_result: dict,
+    brand_voice: dict,
+    run_id: str,
+) -> tuple[dict, quality.QualityReport, int]:
+    """Draft → quality, retry once with feedback on failure.
+
+    Returns (draft_result, last_quality_report, retry_count). If the second
+    attempt also fails, the caller decides whether to raise.
+    """
+    feedback: str | None = None
+    draft_result: dict = {}
+    report: quality.QualityReport | None = None
+
+    for attempt in range(1, MAX_DRAFT_ATTEMPTS + 1):
+        _mark_stage(run_id, "draft" if attempt == 1 else "draft_retry")
+        draft_result = draft.run(
+            topic=topic, research=research, outline=outline_result,
+            brand_voice=brand_voice, run_id=run_id, feedback=feedback,
+        )
+        _mark_stage(run_id, "quality")
+        report = quality.run(
+            draft_markdown=draft_result["markdown"], topic=topic,
+            research=research, outline=outline_result,
+            brand_voice=brand_voice, run_id=run_id,
+        )
+        if report.passed:
+            return draft_result, report, attempt - 1
+        feedback = report.feedback
+
+    assert report is not None
+    return draft_result, report, MAX_DRAFT_ATTEMPTS - 1
 
 
 def _load_brand_voice() -> dict[str, Any]:
@@ -117,12 +175,20 @@ def _finish_run(
 
 
 def _mark_topic_processed(topic_id: int | None) -> None:
+    _set_topic_status(topic_id, "processed")
+
+
+def _mark_topic_failed_review(topic_id: int | None) -> None:
+    _set_topic_status(topic_id, "failed_review_needed")
+
+
+def _set_topic_status(topic_id: int | None, status: str) -> None:
     if topic_id is None:
         return
     with session_scope() as session:
         topic = session.get(Topic, topic_id)
         if topic is not None:
-            topic.status = "processed"
+            topic.status = status
             topic.updated_at = utcnow()
             session.add(topic)
 
