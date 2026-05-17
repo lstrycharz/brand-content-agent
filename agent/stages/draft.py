@@ -1,10 +1,8 @@
-"""Stage 4: expand outline into a full Markdown article."""
+"""Stage 4: expand outline into a full Markdown article body."""
 
 from __future__ import annotations
 
-import json
 import re
-from datetime import date
 from typing import Any
 
 from agent.config import settings
@@ -21,7 +19,12 @@ def run(
     run_id: str,
     feedback: str | None = None,
 ) -> dict[str, Any]:
-    """Return {markdown, word_count, slug, title}."""
+    """Return {body, word_count, slug, title}.
+
+    `body` is the Markdown article only (no YAML frontmatter). The runner
+    composes the final file by prepending frontmatter once the hero image
+    path is known.
+    """
     bus.emit(run_id, "draft",
              "Drafting article..." if feedback is None else f"Retrying with feedback: {feedback}",
              level="info")
@@ -32,19 +35,9 @@ def run(
     body = body.strip()
     word_count = len(re.findall(r"\b\w+\b", body))
     title = outline.get("h1", topic.title)
-    slug = _slugify(title)
-    markdown = _wrap_with_frontmatter(
-        body=body,
-        title=title,
-        slug=slug,
-        category=topic.category,
-        topic_id=topic.id or 0,
-        run_id=run_id,
-        word_count=word_count,
-        seo_meta=outline.get("seo_meta", ""),
-    )
+    slug = slugify(title)
     bus.emit(run_id, "draft", f"Drafted {word_count} words", level="success")
-    return {"markdown": markdown, "word_count": word_count, "slug": slug, "title": title}
+    return {"body": body, "word_count": word_count, "slug": slug, "title": title}
 
 
 def _call_claude_for_draft(
@@ -81,36 +74,7 @@ def _call_claude_for_draft(
     return text_blocks[0]
 
 
-def _slugify(title: str) -> str:
+def slugify(title: str) -> str:
     slug = re.sub(r"[^\w\s-]", "", title.lower())
     slug = re.sub(r"[\s_]+", "-", slug).strip("-")
     return slug[:80]
-
-
-def _wrap_with_frontmatter(
-    *,
-    body: str,
-    title: str,
-    slug: str,
-    category: str,
-    topic_id: int,
-    run_id: str,
-    word_count: int,
-    seo_meta: str,
-) -> str:
-    read_time = max(1, round(word_count / 240))
-    today = date.today().isoformat()
-    frontmatter = (
-        "---\n"
-        f"title: {title}\n"
-        f"slug: {slug}\n"
-        f"date: {today}\n"
-        f"category: {category}\n"
-        f"topic_id: {topic_id}\n"
-        f"run_id: {run_id}\n"
-        f"word_count: {word_count}\n"
-        f"seo_meta: {json.dumps(seo_meta)}\n"
-        f"read_time: {read_time} min\n"
-        "---\n\n"
-    )
-    return frontmatter + body

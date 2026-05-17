@@ -227,7 +227,7 @@ class TestRunnerRetry:
 
     def test_retries_draft_once_on_quality_fail_then_succeeds(self, one_topic):
         from agent import runner
-        from agent.stages import draft, outline, research
+        from agent.stages import draft, image, outline, research
 
         good_outline = {
             "h1": "How to Treat Hormonal Acne",
@@ -258,6 +258,8 @@ class TestRunnerRetry:
                                         "sources": []}), \
              patch.object(outline, "_call_claude_for_outline", return_value=good_outline), \
              patch.object(draft, "_call_claude_for_draft", side_effect=_fake_draft), \
+             patch.object(image, "_call_fal_for_image",
+                          return_value=b"\x89PNG" + b"x" * 200), \
              tone_p, halluc_p:
             summary = runner.run_once()
 

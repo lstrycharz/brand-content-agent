@@ -106,6 +106,16 @@ def _llm_eval_patches():
     return tone_p, halluc_p
 
 
+def _image_patch():
+    """Patch fal.ai boundary so tests never make a real image request."""
+    from unittest.mock import patch as _patch
+
+    from agent.stages import image
+
+    return _patch.object(image, "_call_fal_for_image",
+                          return_value=b"\x89PNG\r\n\x1a\n" + b"fake" * 100)
+
+
 class TestFiveSuccessiveRuns:
     def test_pipeline_completes_five_times_without_overlap(self, seeded_topics):
         from agent import runner
@@ -121,7 +131,7 @@ class TestFiveSuccessiveRuns:
                           side_effect=lambda *, topic, research, outline,
                           brand_voice, feedback:
                           _fake_markdown(topic.title, topic.keyword)), \
-             tone_p, halluc_p:
+             tone_p, halluc_p, _image_patch():
             results = [runner.run_once() for _ in range(5)]
 
         # All runs succeeded with distinct run_ids and output files
@@ -149,7 +159,7 @@ class TestFiveSuccessiveRuns:
                           side_effect=lambda *, topic, research, outline,
                           brand_voice, feedback:
                           _fake_markdown(topic.title, topic.keyword)), \
-             tone_p, halluc_p:
+             tone_p, halluc_p, _image_patch():
             runner.run_once()
             runner.run_once()
 

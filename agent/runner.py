@@ -1,7 +1,9 @@
 """Orchestrates the agent's stages for a single run.
 
-Chunk 1 wires Stages 1-4 (Init → Research → Outline → Draft) and writes the
-draft to disk. Stages 5-7 (Quality, Image, Persist) land in later chunks.
+Currently wires Stages 1-6 (Init → Research → Outline → Draft → Quality →
+Image), with auto-retry inside the Draft/Quality loop. The final Markdown is
+written to disk by `_write_draft_file` (a minimal Stage 7 stub — full RUN_LOG
+generation arrives in a later chunk).
 """
 
 from __future__ import annotations
@@ -17,7 +19,7 @@ from sqlmodel import select
 from agent.config import settings
 from agent.db import Run, Topic, session_scope, utcnow
 from agent.progress import bus
-from agent.stages import draft, init, outline, quality, research
+from agent.stages import draft, image, init, outline, quality, research
 
 
 class QualityRetryExhausted(RuntimeError):
@@ -75,10 +77,24 @@ def run_once(topic_id: int | None = None) -> dict[str, Any]:
                      level="error")
             raise QualityRetryExhausted(report.feedback or "quality check failed")
 
-        output_path = _write_draft(
-            slug=draft_result["slug"], markdown=draft_result["markdown"],
+        date_str = utcnow().date().isoformat()
+        _mark_stage(run_id, "image")
+        image_path = image.run(
+            topic=topic, slug=draft_result["slug"],
+            date_str=date_str, run_id=run_id,
         )
-        _finish_run(run_id, status="success", output_file=str(output_path))
+
+        _mark_stage(run_id, "persist")
+        output_path = _write_draft_file(
+            slug=draft_result["slug"], body=draft_result["body"],
+            title=draft_result["title"], topic=topic, run_id=run_id,
+            word_count=draft_result["word_count"],
+            seo_meta=outline_result.get("seo_meta", ""),
+            image_path=image_path, date_str=date_str,
+            tone_score=report.tone_score, seo_score=report.seo_score,
+        )
+        _finish_run(run_id, status="success", output_file=str(output_path),
+                    image_file=str(image_path))
         _mark_topic_processed(topic.id)
         bus.emit(run_id, "done", f"Draft written to {output_path}", level="success")
 
@@ -87,6 +103,7 @@ def run_once(topic_id: int | None = None) -> dict[str, Any]:
             "topic_title": topic.title,
             "word_count": draft_result["word_count"],
             "output_file": str(output_path),
+            "image_file": str(image_path),
             "tone_score": report.tone_score,
             "seo_score": report.seo_score,
             "retry_count": retry_count,
@@ -125,7 +142,7 @@ def _draft_with_retry(
         )
         _mark_stage(run_id, "quality")
         report = quality.run(
-            draft_markdown=draft_result["markdown"], topic=topic,
+            draft_markdown=draft_result["body"], topic=topic,
             research=research, outline=outline_result,
             brand_voice=brand_voice, run_id=run_id,
         )
@@ -144,12 +161,63 @@ def _load_brand_voice() -> dict[str, Any]:
     return DEFAULT_BRAND_VOICE
 
 
-def _write_draft(*, slug: str, markdown: str) -> Path:
+def _write_draft_file(
+    *,
+    slug: str,
+    body: str,
+    title: str,
+    topic: Topic,
+    run_id: str,
+    word_count: int,
+    seo_meta: str,
+    image_path: Path,
+    date_str: str,
+    tone_score: float,
+    seo_score: float,
+) -> Path:
     settings.drafts_dir.mkdir(parents=True, exist_ok=True)
-    today = utcnow().date().isoformat()
-    path = settings.drafts_dir / f"{today}-{slug}.md"
-    path.write_text(markdown, encoding="utf-8")
-    return path
+    output_path = settings.drafts_dir / f"{date_str}-{slug}.md"
+    frontmatter = _build_frontmatter(
+        title=title, slug=slug, date_str=date_str, category=topic.category,
+        topic_id=topic.id or 0, run_id=run_id, word_count=word_count,
+        seo_meta=seo_meta, hero_image=image_path.name,
+        tone_score=tone_score, seo_score=seo_score,
+    )
+    output_path.write_text(frontmatter + body, encoding="utf-8")
+    return output_path
+
+
+def _build_frontmatter(
+    *,
+    title: str,
+    slug: str,
+    date_str: str,
+    category: str,
+    topic_id: int,
+    run_id: str,
+    word_count: int,
+    seo_meta: str,
+    hero_image: str,
+    tone_score: float,
+    seo_score: float,
+) -> str:
+    read_time = max(1, round(word_count / 240))
+    return (
+        "---\n"
+        f"title: {title}\n"
+        f"slug: {slug}\n"
+        f"date: {date_str}\n"
+        f"category: {category}\n"
+        f"topic_id: {topic_id}\n"
+        f"run_id: {run_id}\n"
+        f"word_count: {word_count}\n"
+        f"tone_score: {tone_score:.2f}\n"
+        f"seo_score: {seo_score:.2f}\n"
+        f"seo_meta: {json.dumps(seo_meta)}\n"
+        f"hero_image: ./{hero_image}\n"
+        f"read_time: {read_time} min\n"
+        "---\n\n"
+    )
 
 
 def _mark_stage(run_id: str, stage: str) -> None:
@@ -161,7 +229,9 @@ def _mark_stage(run_id: str, stage: str) -> None:
 
 def _finish_run(
     run_id: str, *, status: str,
-    output_file: str | None = None, error_message: str | None = None,
+    output_file: str | None = None,
+    image_file: str | None = None,
+    error_message: str | None = None,
 ) -> None:
     with session_scope() as session:
         row = session.exec(select(Run).where(Run.run_id == run_id)).one()
@@ -169,6 +239,8 @@ def _finish_run(
         row.completed_at = utcnow()
         if output_file is not None:
             row.output_file = output_file
+        if image_file is not None:
+            row.image_file = image_file
         if error_message is not None:
             row.error_message = error_message
         session.add(row)
@@ -204,6 +276,9 @@ def main(argv: list[str] | None = None) -> int:
     except LookupError as exc:
         print(f"[error] {exc}", file=sys.stderr)
         return 2
+    except QualityRetryExhausted as exc:
+        print(f"[failed_review_needed] quality retry exhausted: {exc}", file=sys.stderr)
+        return 3
     except Exception as exc:
         print(f"[error] Run failed: {exc}", file=sys.stderr)
         return 1
@@ -211,7 +286,11 @@ def main(argv: list[str] | None = None) -> int:
     print(f"[done] {summary['topic_title']}")
     print(f"       run_id     {summary['run_id']}")
     print(f"       words      {summary['word_count']}")
-    print(f"       output     {summary['output_file']}")
+    print(f"       tone       {summary['tone_score']:.2f}/5")
+    print(f"       seo        {summary['seo_score']:.2f}/5")
+    print(f"       retries    {summary['retry_count']}")
+    print(f"       draft      {summary['output_file']}")
+    print(f"       image      {summary['image_file']}")
     return 0
 
 

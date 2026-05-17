@@ -130,7 +130,7 @@ class TestOutlineStage:
 
 
 class TestDraftStage:
-    def test_returns_markdown_with_frontmatter(
+    def test_returns_body_word_count_slug_title(
         self, sample_topics, fake_research_findings, fake_outline,
     ):
         from agent.stages import draft
@@ -151,9 +151,12 @@ class TestDraftStage:
                 feedback=None,
             )
 
-        assert result["markdown"].startswith("---\n")  # frontmatter present
-        assert "title: How to Treat Hormonal Acne" in result["markdown"]
-        assert "run_id: r1" in result["markdown"]
+        # draft.run returns the body only; runner attaches frontmatter
+        assert result["body"].startswith("# How to Treat Hormonal Acne")
+        assert "---" not in result["body"][:5]
+        # title comes from outline.h1 (the fake fixture extends with subtitle)
+        assert result["title"] == "How to Treat Hormonal Acne: A Complete Guide"
+        assert result["slug"].startswith("how-to-treat-hormonal-acne")
         assert result["word_count"] >= 100
 
     def test_accepts_retry_feedback(self, sample_topics, fake_research_findings, fake_outline):
