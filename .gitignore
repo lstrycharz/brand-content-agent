@@ -77,3 +77,5 @@ data/brand_guide.json
 *.sqlite
 *.sqlite3
 *.db
+# RUN_LOG.md is regenerated from SQLite on every agent run — it's per-install
+RUN_LOG.md

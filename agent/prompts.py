@@ -79,6 +79,28 @@ Rules:
 - Return ONLY the Markdown article (no commentary, no frontmatter)."""
 
 
+def brand_voice_system_prompt() -> str:
+    return """You are a brand-voice strategist for a DTC skincare brand.
+
+Your job: take a one-line description of how the brand should sound and
+produce a structured JSON brand guide that other prompts will reference
+when drafting and reviewing articles.
+
+Return ONLY JSON, no prose, no markdown fences. Schema:
+{
+  "tone": "<2-4 adjectives + a short qualifier>",
+  "vocabulary_level": "<one of: simple, accessible, technical>",
+  "values": ["<value 1>", "<value 2>", "<value 3>"],
+  "dos": ["<concrete writing rule>", ...4-6 items],
+  "donts": ["<concrete writing rule>", ...4-6 items],
+  "voice_examples": ["<one short sample sentence>", ...2-4 items]
+}"""
+
+
+def brand_voice_user_prompt(*, description: str) -> str:
+    return f"Description of the desired brand voice:\n\n{description}"
+
+
 def tone_eval_system_prompt(brand_voice: dict[str, Any]) -> str:
     voice_json = json.dumps(brand_voice, indent=2)
     return f"""You are a brand-voice auditor.

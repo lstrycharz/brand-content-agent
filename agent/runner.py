@@ -16,6 +16,7 @@ from typing import Any
 
 from sqlmodel import select
 
+from agent import brand_voice, run_log
 from agent.config import settings
 from agent.db import Run, Topic, session_scope, utcnow
 from agent.progress import bus
@@ -81,6 +82,7 @@ def run_once(
             bus.emit(run_id, "error",
                      "Quality checks failed after retry — topic queued for review.",
                      level="error")
+            _safe_regenerate_run_log()
             raise QualityRetryExhausted(report.feedback or "quality check failed")
 
         date_str = utcnow().date().isoformat()
@@ -102,6 +104,7 @@ def run_once(
         _finish_run(run_id, status="success", output_file=str(output_path),
                     image_file=str(image_path))
         _mark_topic_processed(topic.id)
+        _safe_regenerate_run_log()
         bus.emit(run_id, "done", f"Draft written to {output_path}", level="success")
 
         return {
@@ -119,6 +122,7 @@ def run_once(
         raise
     except Exception as exc:
         _finish_run(run_id, status="failed", error_message=str(exc))
+        _safe_regenerate_run_log()
         bus.emit(run_id, "error", f"Run failed: {exc}", level="error")
         raise
 
@@ -161,10 +165,7 @@ def _draft_with_retry(
 
 
 def _load_brand_voice() -> dict[str, Any]:
-    path = settings.brand_guide_path
-    if path.exists():
-        return json.loads(path.read_text(encoding="utf-8"))
-    return DEFAULT_BRAND_VOICE
+    return brand_voice.load() or DEFAULT_BRAND_VOICE
 
 
 def _write_draft_file(
@@ -258,6 +259,15 @@ def _mark_topic_processed(topic_id: int | None) -> None:
 
 def _mark_topic_failed_review(topic_id: int | None) -> None:
     _set_topic_status(topic_id, "failed_review_needed")
+
+
+def _safe_regenerate_run_log() -> None:
+    """Best-effort RUN_LOG.md regeneration; never let a log failure mask the
+    original exception or success path."""
+    try:
+        run_log.regenerate()
+    except Exception:  # noqa: BLE001 — log writing is not load-bearing
+        pass
 
 
 def _set_topic_status(topic_id: int | None, status: str) -> None:
