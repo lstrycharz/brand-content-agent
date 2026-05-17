@@ -40,7 +40,8 @@ DIFFICULTIES = ("beginner", "intermediate", "advanced")
 
 with st.sidebar:
     st.title("📝 BrandContent")
-    st.caption("DTC skincare content agent")
+    current_vertical = (brand_voice_mod.load() or {}).get("vertical", "any")
+    st.caption(f"DTC content agent · vertical: **{current_vertical}**")
     st.divider()
     with session_scope() as s:
         counts = {
@@ -181,8 +182,13 @@ def render_topics_tab() -> None:
     df = _load_topics_df()
 
     if df.empty:
-        st.info("No topics yet. Click below to import a starter set, or add rows manually.")
-        if st.button("📥 Seed starter topics from CSV", type="primary"):
+        st.info(
+            "No topics yet. The repo ships with **30 example skincare topics** "
+            "in `data/seed_topics.csv` — useful for kicking the tyres, but you'll "
+            "want to replace them with your own once you pick a vertical. "
+            "Add rows directly in the table below, or import the examples."
+        )
+        if st.button("📥 Import example skincare topics", type="secondary"):
             added = _seed_from_csv()
             st.success(f"Imported {added} topics from data/seed_topics.csv")
             st.rerun()
@@ -450,16 +456,18 @@ def _fmt_dt(dt: datetime | None) -> str:
 def render_settings_tab() -> None:
     st.subheader("Brand voice")
     st.caption(
-        "One-line description → Claude turns it into a structured guide "
-        "that every Draft and Tone-eval prompt references. Regenerate any "
-        "time you want to tweak the tone."
+        "Describe your brand in one or two sentences — what it sells, who it "
+        "talks to, and how it sounds. Claude turns that into a structured "
+        "guide (vertical, audience, tone, dos & don'ts) that every prompt in "
+        "the pipeline references. Works for any vertical: skincare, "
+        "supplements, pet food, B2B SaaS, fitness apparel, anything."
     )
 
     current = brand_voice_mod.load()
     if current is None:
         st.warning(
             "No brand guide yet — the agent will fall back to a generic "
-            "science-backed default. Generate one below."
+            "consumer-brand default. Generate one below."
         )
     else:
         st.success(f"Brand guide loaded from `{brand_voice_mod.settings.brand_guide_path}`")
@@ -467,12 +475,17 @@ def render_settings_tab() -> None:
             st.json(current)
 
     description = st.text_area(
-        "Describe your brand voice in one or two sentences",
+        "Describe your brand in one or two sentences",
         value=st.session_state.get("brand_desc", ""),
-        height=100,
+        height=120,
         placeholder=(
-            "Science-backed and no-nonsense, like The Ordinary. "
-            "Educate, don't sell. Avoid hype and clichés."
+            "Examples:\n"
+            "• Skincare brand for sensitive-skin adults, science-backed and "
+            "no-nonsense like The Ordinary.\n"
+            "• Premium dog food for senior pets, warm and informative, "
+            "owners worried about joint health.\n"
+            "• B2B observability SaaS for backend engineers, terse and "
+            "technically precise."
         ),
         key="brand_desc",
     )

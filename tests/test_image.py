@@ -36,21 +36,32 @@ PNG_HEADER = b"\x89PNG\r\n\x1a\n" + b"fake_image_bytes" * 100
 
 
 class TestImagePrompt:
-    def test_prompt_includes_topic_and_category(self, topic_fixture):
+    def test_prompt_includes_topic_category_and_vertical(self, topic_fixture):
         from agent.stages.image import _build_image_prompt
 
-        prompt = _build_image_prompt(topic=topic_fixture)
+        brand_voice = {"vertical": "skincare"}
+        prompt = _build_image_prompt(topic=topic_fixture, brand_voice=brand_voice)
 
         assert "hormonal acne" in prompt.lower() or "acne" in prompt.lower()
         assert "skincare" in prompt.lower()
-        # rules: no text in the image, editorial style
         assert "no text" in prompt.lower()
 
-    def test_prompt_does_not_reference_models_or_brands(self, topic_fixture):
-        """Avoid generating recognisable faces or trademarked brands."""
+    def test_prompt_works_for_any_vertical(self, topic_fixture):
+        """Same builder should drop in for pet food, supplements, etc."""
         from agent.stages.image import _build_image_prompt
 
-        prompt = _build_image_prompt(topic=topic_fixture)
+        for vertical in ("pet food", "supplements", "fitness apparel"):
+            prompt = _build_image_prompt(
+                topic=topic_fixture, brand_voice={"vertical": vertical},
+            )
+            assert vertical in prompt.lower()
+
+    def test_prompt_does_not_reference_models_or_brands(self, topic_fixture):
+        from agent.stages.image import _build_image_prompt
+
+        prompt = _build_image_prompt(
+            topic=topic_fixture, brand_voice={"vertical": "skincare"},
+        )
         lowered = prompt.lower()
         for forbidden in ("celebrity", "model named", "brand:"):
             assert forbidden not in lowered

@@ -15,8 +15,8 @@ from typing import Any
 from agent.config import settings
 
 
-REQUIRED_FIELDS = ("tone", "vocabulary_level", "values", "dos", "donts",
-                   "voice_examples")
+REQUIRED_FIELDS = ("vertical", "target_audience", "tone", "vocabulary_level",
+                   "values", "dos", "donts", "voice_examples")
 
 
 def generate(description: str) -> dict[str, Any]:

@@ -31,7 +31,9 @@ MAX_DRAFT_ATTEMPTS = 2  # initial + 1 retry
 
 
 DEFAULT_BRAND_VOICE: dict[str, Any] = {
-    "tone": "science-backed, no-nonsense, educational",
+    "vertical": "consumer",
+    "target_audience": "informed readers seeking practical, evidence-backed guidance",
+    "tone": "clear, helpful, evidence-backed",
     "vocabulary_level": "accessible (avoid jargon, explain terms inline)",
     "values": ["transparency", "evidence-first", "no over-promising"],
     "dos": [
@@ -44,6 +46,10 @@ DEFAULT_BRAND_VOICE: dict[str, Any] = {
         "no clickbait",
         "no fabricated stats",
         "no aggressive selling",
+    ],
+    "voice_examples": [
+        "Here's what the evidence actually shows.",
+        "Skip the marketing — these are the steps that move the needle.",
     ],
 }
 
@@ -60,11 +66,12 @@ def run_once(
     topic, run_id = init.run(topic_id=topic_id, run_id=run_id)
 
     try:
+        brand_voice = _load_brand_voice()
+
         _mark_stage(run_id, "research")
-        findings = research.run(topic=topic, run_id=run_id)
+        findings = research.run(topic=topic, run_id=run_id, brand_voice=brand_voice)
 
         _mark_stage(run_id, "outline")
-        brand_voice = _load_brand_voice()
         outline_result = outline.run(
             topic=topic, research=findings,
             brand_voice=brand_voice, run_id=run_id,
@@ -89,7 +96,7 @@ def run_once(
         _mark_stage(run_id, "image")
         image_path = image.run(
             topic=topic, slug=draft_result["slug"],
-            date_str=date_str, run_id=run_id,
+            date_str=date_str, run_id=run_id, brand_voice=brand_voice,
         )
 
         _mark_stage(run_id, "persist")

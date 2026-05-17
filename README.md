@@ -1,11 +1,17 @@
 # Brand Content Agent
 
-A small app that writes publish-ready blog articles for your skincare brand — automatically.
+A small open-source app that writes publish-ready blog articles for **any** DTC brand — automatically.
 
-You give it a list of article topics (like *"How to treat hormonal acne"* or *"Vitamin C serums explained"*). When you click a button, it:
+It's a framework, not a skincare tool. The same pipeline works for skincare, supplements, pet food, fitness apparel, B2B SaaS, financial services, or anything else. The brand's vertical, audience, tone, and writing rules live in a single `brand_guide.json` file that Claude generates for you from a one-line description.
 
-1. Searches the web for accurate, up-to-date information
-2. Writes a ~1,200-word article in your brand's voice
+---
+
+## What it does
+
+You give it a list of article topics. When you click a button, it:
+
+1. Searches the web for accurate, up-to-date information on the topic
+2. Writes a ~1,100-word article in your brand's voice
 3. Generates a custom hero image for the top of the article
 4. Saves everything as a ready-to-publish Markdown file on your computer
 
@@ -21,7 +27,7 @@ Three things, all free to set up:
 2. **An Anthropic account** (the company that makes Claude AI) — to write the articles
 3. **A fal.ai account** — to make the hero images
 
-Both services give you free starter credits, and ongoing usage costs about **6 cents per article** (5¢ Claude + ~0.3¢ fal.ai).
+Both services give you free starter credits. Ongoing usage costs about **6 cents per article** (5¢ Claude + ~0.3¢ fal.ai).
 
 ---
 
@@ -126,27 +132,39 @@ To stop the app later, go back to the terminal and press **Ctrl+C**.
 
 The app has four tabs. The first time, use them in this order:
 
-### 1. ⚙️ Settings — Tell it how your brand sounds
+### 1. ⚙️ Settings — Describe your brand (one time)
 
-Write one or two sentences describing your brand voice. For example:
+Write one or two sentences about your brand. Be specific about three things:
+**what you sell**, **who your audience is**, and **how you sound**.
 
-> *"Science-backed and no-nonsense, like The Ordinary. Educate, don't sell. Avoid hype and clichés."*
+Examples that work well:
 
-Click **✨ Generate brand guide**. Claude turns your sentence into a detailed style guide that every article will follow. This takes ~5 seconds and costs less than a penny.
+> *"Skincare brand for sensitive-skin adults, science-backed and no-nonsense like The Ordinary."*
 
-You only need to do this once. (You can regenerate any time you want to tweak the tone.)
+> *"Premium dog food for senior pets — warm and informative tone, audience is owners worried about joint health and longevity."*
+
+> *"B2B observability SaaS for backend engineers — terse, technically precise, no marketing fluff."*
+
+Click **✨ Generate brand guide**. Claude turns your sentence into a structured JSON guide that includes your vertical, audience, tone, vocabulary level, values, dos and don'ts. This takes ~5 seconds and costs less than a penny.
+
+Every prompt in the pipeline — research, outline, draft, image generation, tone evaluation — references this guide. So tweaking it changes how every future article sounds.
+
+You only do this once. Regenerate any time you want to change the brand's voice.
 
 ### 2. 📋 Topics — Load your topic list
 
-First time here, you'll see an empty table and a button **📥 Seed starter topics from CSV**. Click it — you get 30 skincare article ideas ready to go.
+The repo ships with **30 example skincare topics** in `data/seed_topics.csv`. Useful for kicking the tyres if your brand happens to be skincare-adjacent, but for any other vertical you'll want to delete them and write your own.
 
-You can also:
-- **Edit any cell** by clicking it (change titles, keywords, etc.)
-- **Add new rows** at the bottom
-- **Delete rows** by checking the box on the left
-- **Change priority** numbers (1-10, higher = picked sooner)
+**Two ways to add topics:**
+- **Inline:** click the "+" row at the bottom of the table and type in title, keyword, category, difficulty, priority. Hit *Save changes*.
+- **Bulk:** open `data/seed_topics.csv` in any spreadsheet app (Numbers, Excel), replace the rows with your own topics, save, then click *Import example skincare topics* (it's the same import button — it picks up whatever's in the file).
 
-Click **💾 Save changes** to keep your edits.
+For each topic you need:
+- **title** — what the article is about (becomes the H1)
+- **keyword** — the SEO phrase you want the article to rank for
+- **category** — your own grouping (e.g. "ingredients", "comparison", "how-to")
+- **difficulty** — `beginner`, `intermediate`, or `advanced` (informational, doesn't affect the pipeline)
+- **priority** — 1-10, higher gets picked first
 
 ### 3. 🚀 Generate — Make an article
 
@@ -155,17 +173,17 @@ You'll see the next pending topic at the top. Click **🚀 Generate article**.
 A progress panel shows what's happening:
 
 ```
-· [init]     Selected topic: How to treat hormonal acne in adults
-· [research] Searching the web for 'hormonal acne treatment'...
+· [init]     Selected topic: Why senior dogs need joint support
+· [research] Searching the web for 'senior dog joint supplements'...
 · [research] Got 7 key points, 3 sources
 · [outline]  Generating outline...
 ✓ [outline]  Outline ready (5 sections)
 · [draft]    Drafting article...
-✓ [draft]    Drafted 1213 words
+✓ [draft]    Drafted 1108 words
 · [quality]  Validating draft...
 ✓ [quality]  Passed all checks
 · [image]    Generating hero image...
-✓ [image]    Image saved: 2026-05-17-how-to-treat-hormonal-acne-hero.png
+✓ [image]    Image saved: 2026-05-17-why-senior-dogs-need-joint-support-hero.png
 ✓ [done]     Draft written to drafts/...
 ```
 
@@ -201,10 +219,18 @@ You only pay for what you generate. No subscription.
 Claude model names change occasionally. Open `agent/config.py`, find the line with `drafting_model`, and update it to the current best Sonnet model (check <https://docs.anthropic.com/> for the latest name).
 
 **"No pending topics"**
-Either you haven't seeded topics yet (Topics tab → big blue button), or every topic is marked done. Click **↩ Reset failed → pending** on the Topics tab, or change a topic's status back to `pending` directly in the table.
+Either you haven't added topics yet, or every topic is marked done. Click **↩ Reset failed → pending** on the Topics tab, or change a topic's status back to `pending` directly in the table.
 
-**Article quality feels off**
-The agent retries once if quality is poor, then gives up. If results feel generic or off-brand, your brand voice needs more specifics. Regenerate it on the Settings tab with a more detailed description.
+**Article quality feels off / doesn't match my brand**
+The agent retries once if quality checks fail, then gives up. If results feel generic or off-brand, your brand voice description was probably too vague. Regenerate it on the Settings tab with a more specific description — include the vertical, audience, and 2-3 concrete tone words.
+
+**Articles are too short / too long**
+Adjust the bounds in `agent/config.py`:
+```python
+target_word_count: int = 1100   # what Claude aims for
+word_count_min: int = 900       # below this triggers a retry
+word_count_max: int = 1300      # above this triggers a retry
+```
 
 **Stuck / weird behavior**
 Stop the app with Ctrl+C in the terminal, then run `streamlit run app.py` again to restart.
@@ -217,10 +243,14 @@ Open the **Run log** section at the bottom of the Settings tab — every article
 ## For the technically curious
 
 - **`agent/`** — the AI logic, split into seven stages (init, research, outline, draft, quality, image, persist)
-- **`app.py`** — the Streamlit web interface (~350 lines)
+- **`app.py`** — the Streamlit web interface (~370 lines)
 - **`db/brandcontent.sqlite`** — local database of topics, runs, and drafts (open with any SQLite viewer)
 - **`RUN_LOG.md`** — auto-regenerated audit log
-- **`tests/`** — 42 tests, every API call mocked. Run with `python -m pytest tests/`. Costs nothing.
+- **`tests/`** — 43 tests, every API call mocked. Run with `python -m pytest tests/`. Costs nothing.
+
+### Vertical-agnostic by design
+
+Every prompt reads `brand_voice.vertical` and `brand_voice.target_audience` rather than hardcoding any industry. The `brand_guide.json` Claude generates is the single source of truth for what your brand sells and who it talks to. To swap verticals, you just regenerate the brand guide and replace the topics — no code changes.
 
 The agent was built with strict TDD across 6 incremental commits. See `git log --oneline` for the chunk-by-chunk history.
 

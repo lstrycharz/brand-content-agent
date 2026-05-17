@@ -18,6 +18,8 @@ def _isolated_paths(tmp_path, monkeypatch):
 
 
 FAKE_GUIDE = {
+    "vertical": "skincare",
+    "target_audience": "adults building an evidence-based routine",
     "tone": "science-backed, no-nonsense, educational",
     "vocabulary_level": "accessible",
     "values": ["transparency", "evidence-first"],

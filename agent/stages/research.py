@@ -13,7 +13,9 @@ from agent.db import ResearchCache, Topic, session_scope, utcnow
 from agent.progress import bus
 
 
-def run(*, topic: Topic, run_id: str) -> dict[str, Any]:
+def run(
+    *, topic: Topic, run_id: str, brand_voice: dict[str, Any] | None = None,
+) -> dict[str, Any]:
     """Return research findings for a topic, using cache if fresh."""
     cached = _load_from_cache(topic.title)
     if cached is not None:
@@ -21,7 +23,7 @@ def run(*, topic: Topic, run_id: str) -> dict[str, Any]:
         return cached
 
     bus.emit(run_id, "research", f"Searching the web for '{topic.keyword}'...", level="info")
-    findings = _call_claude_with_search(topic=topic)
+    findings = _call_claude_with_search(topic=topic, brand_voice=brand_voice or {})
     _save_to_cache(topic.title, findings)
     bus.emit(run_id, "research",
              f"Got {len(findings.get('key_points', []))} key points, "
@@ -62,7 +64,9 @@ def _save_to_cache(topic_title: str, findings: dict[str, Any]) -> None:
             ))
 
 
-def _call_claude_with_search(*, topic: Topic) -> dict[str, Any]:
+def _call_claude_with_search(
+    *, topic: Topic, brand_voice: dict[str, Any],
+) -> dict[str, Any]:
     """Boundary: call Claude with web_search tool and return parsed JSON findings.
 
     Mocked in tests. Live path uses Claude's server-side web_search tool.
@@ -82,6 +86,7 @@ def _call_claude_with_search(*, topic: Topic) -> dict[str, Any]:
                 topic_title=topic.title,
                 keyword=topic.keyword,
                 category=topic.category,
+                brand_voice=brand_voice,
             ),
         }],
     )

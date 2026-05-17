@@ -1,4 +1,10 @@
-"""Centralised LLM prompts. Each function returns a string."""
+"""Centralised LLM prompts. Each function returns a string.
+
+All prompts are vertical-agnostic: the brand's vertical, audience, tone,
+values, and writing rules live in `brand_guide.json` (generated once via
+`agent.brand_voice.generate`). Prompts read those fields rather than
+hardcoding any industry (skincare, supplements, pet food, etc.).
+"""
 
 from __future__ import annotations
 
@@ -6,16 +12,29 @@ import json
 from typing import Any
 
 
-def research_user_prompt(*, topic_title: str, keyword: str, category: str) -> str:
-    return f"""You are researching for a DTC skincare brand blog post.
+def _vertical(brand_voice: dict[str, Any]) -> str:
+    return brand_voice.get("vertical") or "consumer"
+
+
+def _audience(brand_voice: dict[str, Any]) -> str:
+    return brand_voice.get("target_audience") or "informed readers"
+
+
+def research_user_prompt(
+    *, topic_title: str, keyword: str, category: str, brand_voice: dict[str, Any],
+) -> str:
+    vertical = _vertical(brand_voice)
+    audience = _audience(brand_voice)
+    return f"""You are researching for a {vertical} brand blog post aimed at {audience}.
 
 Topic: {topic_title}
 Target keyword: {keyword}
 Category: {category}
 
-Use the web_search tool to find 3-5 authoritative sources (dermatology sites,
-peer-reviewed summaries, established beauty publications). Then return ONLY a
-JSON object with this exact shape (no prose, no markdown fences):
+Use the web_search tool to find 3-5 authoritative sources appropriate to the
+{vertical} space (recognised publications, primary research, established
+domain experts). Then return ONLY a JSON object with this exact shape (no
+prose, no markdown fences):
 
 {{
   "summary": "<2-3 sentence overview of the topic, grounded in sources>",
@@ -31,7 +50,9 @@ Skip marketing fluff. Prefer claims you can attribute to a source."""
 
 def outline_system_prompt(brand_voice: dict[str, Any]) -> str:
     voice_json = json.dumps(brand_voice, indent=2)
-    return f"""You are a senior content strategist for a DTC skincare brand.
+    vertical = _vertical(brand_voice)
+    audience = _audience(brand_voice)
+    return f"""You are a senior content strategist for a {vertical} brand writing for {audience}.
 You write outlines that are accurate, scannable, and aligned with brand voice.
 
 Brand voice profile:
@@ -65,8 +86,10 @@ Return JSON with this shape:
 
 def draft_system_prompt(brand_voice: dict[str, Any]) -> str:
     voice_json = json.dumps(brand_voice, indent=2)
-    return f"""You are a senior content writer for a DTC skincare brand.
-You write clear, science-backed, scannable articles that match brand voice.
+    vertical = _vertical(brand_voice)
+    audience = _audience(brand_voice)
+    return f"""You are a senior content writer for a {vertical} brand writing for {audience}.
+You write clear, evidence-backed, scannable articles that match brand voice.
 
 Brand voice profile:
 {voice_json}
@@ -80,14 +103,16 @@ Rules:
 
 
 def brand_voice_system_prompt() -> str:
-    return """You are a brand-voice strategist for a DTC skincare brand.
-
-Your job: take a one-line description of how the brand should sound and
-produce a structured JSON brand guide that other prompts will reference
-when drafting and reviewing articles.
+    return """You are a brand-voice strategist for a DTC brand. Your job: take a
+one-line description of the brand and produce a structured JSON brand guide
+that every downstream prompt (research, outline, draft, tone-eval) will
+reference. The vertical/industry is whatever the description implies — could
+be skincare, supplements, pet food, fitness apparel, B2B SaaS, anything.
 
 Return ONLY JSON, no prose, no markdown fences. Schema:
 {
+  "vertical": "<short industry label inferred from the description: 'skincare', 'pet food', 'supplements', 'fitness apparel', etc.>",
+  "target_audience": "<one-line description of who reads this brand's content>",
   "tone": "<2-4 adjectives + a short qualifier>",
   "vocabulary_level": "<one of: simple, accessible, technical>",
   "values": ["<value 1>", "<value 2>", "<value 3>"],
@@ -98,7 +123,7 @@ Return ONLY JSON, no prose, no markdown fences. Schema:
 
 
 def brand_voice_user_prompt(*, description: str) -> str:
-    return f"Description of the desired brand voice:\n\n{description}"
+    return f"Description of the desired brand:\n\n{description}"
 
 
 def tone_eval_system_prompt(brand_voice: dict[str, Any]) -> str:
@@ -118,11 +143,12 @@ def tone_eval_user_prompt(*, draft: str) -> str:
 
 def hallucination_system_prompt() -> str:
     return """You are a fact-checker. The author wrote a blog article using only
-the research findings provided. Identify any factual claims in the article that
-are NOT supported by the research.
+the research findings provided. Identify any factual claims in the article
+that are NOT supported by the research.
 
-Be strict about specific numbers, percentages, study results, and named studies.
-General domain knowledge (e.g., "skin produces sebum") is fine without a source.
+Be strict about specific numbers, percentages, study results, and named
+studies. General domain knowledge (e.g., "water boils at 100°C") is fine
+without a source.
 
 Return ONLY JSON:
 {
@@ -164,3 +190,15 @@ Research (only cite from these findings; do not fabricate):
 {research_json}{feedback_block}
 
 Return Markdown only. Start with the H1 from the outline."""
+
+
+def image_prompt(*, topic_title: str, category: str, brand_voice: dict[str, Any]) -> str:
+    """Build the fal.ai prompt for a hero image. Vertical-aware."""
+    vertical = _vertical(brand_voice)
+    return (
+        f"Editorial photography hero image for a {vertical} brand blog post about "
+        f"{topic_title}. {category} aesthetic. "
+        "Soft natural lighting, minimal composition, neutral background, "
+        "shallow depth of field, no text, no logos, no faces, "
+        "magazine quality, high resolution."
+    )

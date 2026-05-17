@@ -7,9 +7,11 @@ Flux Schnell is the cheapest dependable text-to-image model on fal.ai
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Any
 
 import httpx
 
+from agent import prompts
 from agent.config import settings
 from agent.db import Topic
 from agent.progress import bus
@@ -19,10 +21,13 @@ FAL_MODEL = "fal-ai/flux/schnell"
 IMAGE_DOWNLOAD_TIMEOUT_S = 30.0
 
 
-def run(*, topic: Topic, slug: str, date_str: str, run_id: str) -> Path:
+def run(
+    *, topic: Topic, slug: str, date_str: str, run_id: str,
+    brand_voice: dict[str, Any] | None = None,
+) -> Path:
     """Generate the hero image and persist it. Returns the saved path."""
     bus.emit(run_id, "image", "Generating hero image...", level="info")
-    prompt = _build_image_prompt(topic=topic)
+    prompt = _build_image_prompt(topic=topic, brand_voice=brand_voice or {})
     image_bytes = _call_fal_for_image(prompt=prompt)
     if not image_bytes:
         raise ValueError("fal.ai returned empty image bytes")
@@ -31,14 +36,12 @@ def run(*, topic: Topic, slug: str, date_str: str, run_id: str) -> Path:
     return path
 
 
-def _build_image_prompt(*, topic: Topic) -> str:
-    """Build a fal.ai prompt that biases for usable blog hero imagery."""
-    return (
-        f"Editorial photography hero image for a skincare blog post about "
-        f"{topic.title}. {topic.category} category aesthetic. "
-        "Soft natural lighting, minimal composition, neutral background, "
-        "shallow depth of field, no text, no logos, no faces, "
-        "magazine quality, high resolution."
+def _build_image_prompt(*, topic: Topic, brand_voice: dict[str, Any]) -> str:
+    """Build a vertical-aware fal.ai prompt for usable blog hero imagery."""
+    return prompts.image_prompt(
+        topic_title=topic.title,
+        category=topic.category,
+        brand_voice=brand_voice,
     )
 
 

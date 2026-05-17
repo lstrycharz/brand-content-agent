@@ -123,7 +123,8 @@ class TestFiveSuccessiveRuns:
 
         tone_p, halluc_p = _llm_eval_patches()
         with patch.object(research, "_call_claude_with_search",
-                          side_effect=lambda *, topic: _fake_findings(topic.title)), \
+                          side_effect=lambda *, topic, brand_voice:
+                          _fake_findings(topic.title)), \
              patch.object(outline, "_call_claude_for_outline",
                           side_effect=lambda *, topic, research, brand_voice:
                           _fake_outline(topic.title)), \
@@ -151,7 +152,8 @@ class TestFiveSuccessiveRuns:
 
         tone_p, halluc_p = _llm_eval_patches()
         with patch.object(research, "_call_claude_with_search",
-                          side_effect=lambda *, topic: _fake_findings(topic.title)), \
+                          side_effect=lambda *, topic, brand_voice:
+                          _fake_findings(topic.title)), \
              patch.object(outline, "_call_claude_for_outline",
                           side_effect=lambda *, topic, research, brand_voice:
                           _fake_outline(topic.title)), \
