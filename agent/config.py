@@ -18,9 +18,11 @@ class Settings(BaseSettings):
     run_log_path: Path = Path("RUN_LOG.md")
 
     drafting_model: str = "claude-sonnet-4-6"
-    target_word_count: int = 1200
-    word_count_min: int = 1000
-    word_count_max: int = 1400
+    # Word count: aim for 1100, accept 900–1300. The buffer keeps near-miss
+    # drafts from triggering the expensive quality-retry loop.
+    target_word_count: int = 1100
+    word_count_min: int = 900
+    word_count_max: int = 1300
     tone_score_threshold: float = 3.5
     research_cache_days: int = 7
 
