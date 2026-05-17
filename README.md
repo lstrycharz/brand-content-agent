@@ -1,181 +1,236 @@
-# BrandContent
+# Brand Content Agent
 
-An autonomous content production agent for a DTC skincare brand.
+A small app that writes publish-ready blog articles for your skincare brand — automatically.
 
-You give it a backlog of topics; it researches each one, drafts a publish-ready
-Markdown article in your brand voice, generates a hero image, runs quality and
-hallucination checks, and queues the result for review. Everything runs locally
-behind a Streamlit UI you trigger by hand — no cron, no cloud.
+You give it a list of article topics (like *"How to treat hormonal acne"* or *"Vitamin C serums explained"*). When you click a button, it:
+
+1. Searches the web for accurate, up-to-date information
+2. Writes a ~1,200-word article in your brand's voice
+3. Generates a custom hero image for the top of the article
+4. Saves everything as a ready-to-publish Markdown file on your computer
+
+You stay in control. The app does **not** post anywhere on its own — you review the result and publish to your blog yourself. It just removes the hours of writing and image-making.
+
+---
+
+## What you need before starting
+
+Three things, all free to set up:
+
+1. **A computer** — Mac, Windows, or Linux. Anything from the last 5 years.
+2. **An Anthropic account** (the company that makes Claude AI) — to write the articles
+3. **A fal.ai account** — to make the hero images
+
+Both services give you free starter credits, and ongoing usage costs about **6 cents per article** (5¢ Claude + ~0.3¢ fal.ai).
+
+---
+
+## Step 1 — Get your API keys
+
+Think of API keys like passwords that let this app use Claude and fal.ai on your behalf.
+
+**Anthropic key**
+1. Go to <https://console.anthropic.com/>
+2. Sign up or log in
+3. Click **API Keys** in the left menu
+4. Click **Create Key**, give it any name (e.g. "Brand Content")
+5. Copy the key (it starts with `sk-ant-...`) — **save it somewhere safe**, you won't see it again
+
+**fal.ai key**
+1. Go to <https://fal.ai/dashboard>
+2. Sign up or log in
+3. Open the **API Keys** section
+4. Create a new key and copy it
+
+---
+
+## Step 2 — Install Python
+
+This app runs on Python (a programming language). Most computers don't have the right version pre-installed.
+
+- **Mac:** Open Terminal (⌘+Space, type "Terminal"). If you don't have Homebrew, install it from <https://brew.sh>, then run:
+  ```
+  brew install python@3.11
+  ```
+- **Windows:** Download Python from <https://www.python.org/downloads/>. During install, **check the box** that says *"Add Python to PATH"* — this is the most common gotcha.
+- **Linux:** You probably already have Python. Run `python3 --version`. If it shows 3.11 or higher, you're good.
+
+You'll also need **Git** (a tool that downloads code from GitHub). Mac and Linux usually have it. On Windows, install from <https://git-scm.com/downloads>.
+
+---
+
+## Step 3 — Download Brand Content Agent
+
+Open Terminal (Mac/Linux) or Command Prompt (Windows). Navigate to where you want to install the app (e.g. your Desktop):
 
 ```
-┌─────────────────────────────────────────────┐
-│  Streamlit UI (localhost:8501)              │
-│  Topics · Generate · Drafts · Settings      │
-└──────────────────────┬──────────────────────┘
-                       │ button click
-                       ▼
-┌─────────────────────────────────────────────┐
-│  Agent (7 stages, deep modules)             │
-│  1. Init      → load topic, create run_id   │
-│  2. Research  → Claude web_search + cache   │
-│  3. Outline   → Claude → JSON outline       │
-│  4. Draft     → Claude → Markdown body      │
-│  5. Quality   → validate + retry once       │
-│  6. Image     → fal.ai Flux Schnell         │
-│  7. Persist   → file + DB + RUN_LOG.md      │
-└──────────────────────┬──────────────────────┘
-                       │
-                       ▼
-┌─────────────────────────────────────────────┐
-│  SQLite   (topics, runs, drafts, cache)     │
-│  drafts/  (.md articles + .png hero images) │
-│  RUN_LOG.md (auto-generated from DB)        │
-└─────────────────────────────────────────────┘
+cd ~/Desktop
+git clone https://github.com/lstrycharz/brand-content-agent.git
+cd brand-content-agent
 ```
 
 ---
 
-## What it does, end to end
+## Step 4 — Set up the app
 
-1. You add topics in the **Topics** tab (or import the bundled 30-topic CSV)
-2. You click **Generate** on the dashboard
-3. The agent picks the highest-priority pending topic
-4. It searches the web through Claude's `web_search_20250305` tool and caches
-   the findings in SQLite for 7 days
-5. It generates a structured JSON outline (H1, H2 sections, CTA, SEO meta)
-6. It expands the outline into a ~1200-word Markdown article in your brand
-   voice (cached prompt context keeps cost down)
-7. It runs five quality checks — word count, keyword placement, H2 structure,
-   tone vs brand voice (LLM-eval), and hallucination check (LLM cross-check
-   against the research findings). On failure, it retries the draft *once*
-   with concrete feedback, then either passes or marks the topic
-   `failed_review_needed`
-8. It generates a 16:9 hero image via fal.ai Flux Schnell (~$0.003 per image)
-9. It writes the final Markdown to `drafts/`, updates SQLite, and regenerates
-   `RUN_LOG.md` from the runs table
+Still in the terminal, in the `brand-content-agent` folder, run these three commands one at a time:
 
-You preview the result in the **Drafts** tab and publish to your blog manually.
-
----
-
-## Setup
-
-Requirements: Python 3.11+, an Anthropic API key, a fal.ai API key.
-
-```bash
-git clone <this repo>
-cd BrandContent
-
+**Mac/Linux:**
+```
 python3 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
-
-cp .env.example .env
-# edit .env and fill in:
-#   ANTHROPIC_API_KEY=sk-ant-...
-#   FAL_KEY=...
 ```
+
+**Windows:**
+```
+python -m venv .venv
+.venv\Scripts\activate
+pip install -r requirements.txt
+```
+
+The last command downloads everything the app needs. Takes about a minute. When it's done, you'll see your prompt change to start with `(.venv)`.
 
 ---
 
-## Running
+## Step 5 — Add your API keys
 
-```bash
+In the `brand-content-agent` folder, find the file called `.env.example`. Make a copy of it and rename the copy to just `.env` (remove `.example` from the end).
+
+Open `.env` in any text editor (TextEdit on Mac, Notepad on Windows). Paste your keys in:
+
+```
+ANTHROPIC_API_KEY=sk-ant-paste-your-key-here
+FAL_KEY=paste-your-fal-key-here
+```
+
+Save and close. The `.env` file stays on your computer — it's automatically excluded from anything you share.
+
+---
+
+## Step 6 — Start the app
+
+In the terminal, with `(.venv)` still showing at the start of your prompt:
+
+```
 streamlit run app.py
 ```
 
-Open <http://localhost:8501>:
+A browser tab opens at **http://localhost:8501**. That's the app.
 
-- **📋 Topics** — Inline CRUD over the topics backlog. First visit shows
-  *Seed starter topics from CSV* which imports the 30 topics in
-  `data/seed_topics.csv`. Add/edit/delete rows, then *Save changes*.
-- **🚀 Generate** — Shows the next pending topic. Click *Generate article* and
-  watch each stage stream events into the status panel. Takes 1-3 minutes per
-  run depending on web search latency.
-- **📰 Drafts** — Gallery of finished runs with hero images, tone/SEO scores,
-  and the rendered article body.
-- **⚙️ Settings** — Generate a brand voice JSON from a one-line description,
-  or view the auto-generated `RUN_LOG.md`.
+To stop the app later, go back to the terminal and press **Ctrl+C**.
 
 ---
 
-## Running without the UI
+## How to use it
 
-```bash
-# Run the agent once on the highest-priority pending topic
-python -m agent.runner
+The app has four tabs. The first time, use them in this order:
 
-# Or pin a specific topic
-python -m agent.runner --topic-id 7
-```
+### 1. ⚙️ Settings — Tell it how your brand sounds
 
-Both paths produce the same output: a `.md` + `.png` in `drafts/`, a row in
-the `runs` table, and an updated `RUN_LOG.md`.
+Write one or two sentences describing your brand voice. For example:
 
----
+> *"Science-backed and no-nonsense, like The Ordinary. Educate, don't sell. Avoid hype and clichés."*
 
-## Tests
+Click **✨ Generate brand guide**. Claude turns your sentence into a detailed style guide that every article will follow. This takes ~5 seconds and costs less than a penny.
 
-```bash
-python -m pytest tests/ -v
-```
+You only need to do this once. (You can regenerate any time you want to tweak the tone.)
 
-42 tests. Every Claude and fal.ai call is mocked at the function boundary
-(`_call_claude_*` and `_call_fal_*`), so the suite runs offline in well under
-a second and costs zero dollars. The "five successive runs" integration test
-proves the pipeline is reliable without waiting on a real cron schedule.
+### 2. 📋 Topics — Load your topic list
 
----
+First time here, you'll see an empty table and a button **📥 Seed starter topics from CSV**. Click it — you get 30 skincare article ideas ready to go.
 
-## Project layout
+You can also:
+- **Edit any cell** by clicking it (change titles, keywords, etc.)
+- **Add new rows** at the bottom
+- **Delete rows** by checking the box on the left
+- **Change priority** numbers (1-10, higher = picked sooner)
+
+Click **💾 Save changes** to keep your edits.
+
+### 3. 🚀 Generate — Make an article
+
+You'll see the next pending topic at the top. Click **🚀 Generate article**.
+
+A progress panel shows what's happening:
 
 ```
-agent/
-├── runner.py           # Orchestrates the 7 stages; CLI entry
-├── config.py           # pydantic-settings loaded from .env
-├── db.py               # sqlmodel tables: Topic, Run, Draft, ResearchCache
-├── brand_voice.py      # Brand guide generator (Stage 5 helper)
-├── run_log.py          # RUN_LOG.md regeneration from SQLite
-├── prompts.py          # Centralised Claude system/user prompts
-├── progress.py         # Thread-safe pub/sub bus (agent → UI)
-└── stages/
-    ├── init.py         # Select topic, create Run record
-    ├── research.py     # Claude web_search + cache
-    ├── outline.py      # Claude → JSON outline
-    ├── draft.py        # Claude → Markdown body
-    ├── quality.py      # Validators + LLM evaluators
-    ├── image.py        # fal.ai Flux Schnell hero image
-    └── persist.py      # (currently inlined in runner — Stage 7)
-
-app.py                  # Streamlit UI (4 tabs, ~350 lines)
-data/seed_topics.csv    # 30 starter topics
-drafts/                 # Generated articles + hero images (gitignored)
-db/                     # SQLite file (gitignored)
-RUN_LOG.md              # Auto-generated audit log
-tests/                  # 42 tests, fully mocked
+· [init]     Selected topic: How to treat hormonal acne in adults
+· [research] Searching the web for 'hormonal acne treatment'...
+· [research] Got 7 key points, 3 sources
+· [outline]  Generating outline...
+✓ [outline]  Outline ready (5 sections)
+· [draft]    Drafting article...
+✓ [draft]    Drafted 1213 words
+· [quality]  Validating draft...
+✓ [quality]  Passed all checks
+· [image]    Generating hero image...
+✓ [image]    Image saved: 2026-05-17-how-to-treat-hormonal-acne-hero.png
+✓ [done]     Draft written to drafts/...
 ```
 
----
+It takes 1-3 minutes per article.
 
-## Design rules followed
+### 4. 📰 Drafts — Review
 
-- **Deep modules over shallow.** Each stage is one public `run()` over a
-  hidden private boundary (`_call_claude_*`, `_call_fal_*`). Tests mock at
-  that boundary.
-- **TDD.** Every chunk landed RED → GREEN → REFACTOR. No implementation
-  shipped without a failing test first.
-- **One thing per commit.** Five chunks, five commits, each a working state.
-  See `git log`.
-- **Naive UTC datetimes.** SQLite drops tzinfo on roundtrip; we use naive
-  UTC throughout to avoid `can't compare offset-naive and offset-aware`
-  surprises.
+Every finished article appears here as a card with the hero image, quality scores, and the article text. Click *View article* to expand the full draft.
+
+The actual files live in the `drafts/` folder on your computer — copy them into your blog when you're happy.
 
 ---
 
-## What's *not* in scope
+## What does it cost?
 
-- GitHub Actions cron (the scheduler is *you* — click the button)
-- Email or Slack notifications (the UI shows progress live)
-- Auto-publishing to a CMS — you copy/paste from `drafts/` to your blog
-- Multi-agent orchestration
-- Self-improvement / RL on outputs
+Per article:
+
+| Item | Cost |
+|---|---|
+| Claude (writing + checks) | ~5¢ |
+| fal.ai (hero image) | ~0.3¢ |
+| **Total** | **~6¢** |
+
+For 100 articles: about **$6**.
+
+You only pay for what you generate. No subscription.
+
+---
+
+## Common problems
+
+**"Model not found" error**
+Claude model names change occasionally. Open `agent/config.py`, find the line with `drafting_model`, and update it to the current best Sonnet model (check <https://docs.anthropic.com/> for the latest name).
+
+**"No pending topics"**
+Either you haven't seeded topics yet (Topics tab → big blue button), or every topic is marked done. Click **↩ Reset failed → pending** on the Topics tab, or change a topic's status back to `pending` directly in the table.
+
+**Article quality feels off**
+The agent retries once if quality is poor, then gives up. If results feel generic or off-brand, your brand voice needs more specifics. Regenerate it on the Settings tab with a more detailed description.
+
+**Stuck / weird behavior**
+Stop the app with Ctrl+C in the terminal, then run `streamlit run app.py` again to restart.
+
+**Forgot what the agent has done**
+Open the **Run log** section at the bottom of the Settings tab — every article it's ever made is listed there. Or open the `RUN_LOG.md` file in the project folder.
+
+---
+
+## For the technically curious
+
+- **`agent/`** — the AI logic, split into seven stages (init, research, outline, draft, quality, image, persist)
+- **`app.py`** — the Streamlit web interface (~350 lines)
+- **`db/brandcontent.sqlite`** — local database of topics, runs, and drafts (open with any SQLite viewer)
+- **`RUN_LOG.md`** — auto-regenerated audit log
+- **`tests/`** — 42 tests, every API call mocked. Run with `python -m pytest tests/`. Costs nothing.
+
+The agent was built with strict TDD across 6 incremental commits. See `git log --oneline` for the chunk-by-chunk history.
+
+---
+
+## What this app does *not* do
+
+- Post to your blog or CMS for you (you copy/paste from the `drafts/` folder)
+- Run on a schedule (you trigger each article manually with a button)
+- Send email/Slack notifications (everything happens in the UI window)
+- Compete with you for control — every output is reviewed by you before going live
+
+It's a tool, not an autopilot.
