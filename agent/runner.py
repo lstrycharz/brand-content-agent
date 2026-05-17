@@ -47,10 +47,16 @@ DEFAULT_BRAND_VOICE: dict[str, Any] = {
 }
 
 
-def run_once(topic_id: int | None = None) -> dict[str, Any]:
-    """Run the agent end-to-end for one topic. Returns summary dict."""
+def run_once(
+    topic_id: int | None = None, run_id: str | None = None,
+) -> dict[str, Any]:
+    """Run the agent end-to-end for one topic. Returns summary dict.
+
+    `run_id` may be provided by the UI so it can subscribe to the progress
+    bus before this function (and the agent thread) actually start.
+    """
     settings.ensure_dirs()
-    topic, run_id = init.run(topic_id=topic_id)
+    topic, run_id = init.run(topic_id=topic_id, run_id=run_id)
 
     try:
         _mark_stage(run_id, "research")

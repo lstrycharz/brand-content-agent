@@ -44,11 +44,12 @@ python -m agent.runner --topic-id 1
 python -m pytest tests/ -v
 
 # Lint
-ruff check agent/ tests/
-ruff check --fix agent/ tests/
+ruff check app.py agent/ tests/
+ruff check --fix app.py agent/ tests/
 
-# (Chunk 4) Start the Streamlit UI
+# Start the Streamlit UI (recommended way to drive the agent)
 streamlit run app.py
+# → opens http://localhost:8501 with 3 tabs: Topics, Generate, Drafts
 ```
 
 ## Project Structure
@@ -76,11 +77,13 @@ tests/                 # pytest tests with mocked LLM/web boundaries
 ```
 
 ## Rules
-- **Mock at the stage boundary, not internal helpers.** Each stage exposes a private `_call_claude_*` function — that's the mock point. Don't mock internal parsing/cache helpers.
-- **Pure stage signatures.** Stages take `Topic`, dicts, and `run_id` strings; they don't take clients. Internal boundary functions build their own `Anthropic()` instance from settings.
+- **Mock at the stage boundary, not internal helpers.** Each stage exposes a private `_call_claude_*` or `_call_fal_*` function — that's the mock point. Don't mock internal parsing/cache helpers.
+- **Pure stage signatures.** Stages take `Topic`, dicts, and `run_id` strings; they don't take clients. Internal boundary functions build their own `Anthropic()`/`fal_client` instance from settings.
 - **All datetimes are naive UTC.** SQLite drops tzinfo on roundtrip, so `utcnow()` in `agent.db` returns naive UTC. Don't introduce tz-aware datetimes — comparison errors follow.
-- **`run_id` flows through every stage.** It's the join key for the progress bus, Run records, and frontmatter. Always pass it through.
+- **`run_id` flows through every stage.** It's the join key for the progress bus, Run records, and frontmatter. Always pass it through. The UI pre-generates the `run_id` so it can subscribe to the bus before the agent thread starts.
 - **Topic status transitions land in `runner.py`, not `init.py`.** `init.run()` only selects + creates a Run record. Marking `processed`/`failed_review_needed` happens at the orchestration layer.
+- **Materialise ORM rows inside the session_scope().** sqlmodel objects detach when the session closes — accessing `t.title` from a list comprehension *after* the `with` block raises `DetachedInstanceError`. Either build dicts inside the block or `session.expunge(obj)` before yielding it.
+- **Frontmatter lives in `runner._build_frontmatter()`, not `draft.py`.** Draft returns body only so the runner can attach the hero image path (and later, additional metadata) after Stage 6 completes.
 
 ## Definition of Done
 - Tests written before implementation (red/green/refactor cycle)
@@ -96,6 +99,9 @@ tests/                 # pytest tests with mocked LLM/web boundaries
 - **Test DB isolation**: `agent.db._engine` is a module-global. Tests must call `db.reset_engine()` in fixtures (see `conftest.py::temp_db` and `test_integration.py::_isolated_paths`).
 - **Topic re-selection**: Without marking a topic `processed`, `init.run()` keeps picking the same highest-priority pending one. The runner handles this — `init` itself does not.
 - **Anthropic tool name versioning**: Web search tool type is `web_search_20250305`. If Anthropic releases a new version, update `agent/stages/research.py`.
+- **Streamlit hot-reload + SQLModel**: When Streamlit reloads `app.py` it may re-import `agent.db`, which tries to re-register the same tables in `SQLModel.metadata`. The fix is `__table_args__ = {"extend_existing": True}` on each model — already in place.
+- **DetachedInstanceError in `app.py`**: Reading attributes from a sqlmodel row after the `session_scope()` exits will fail. Build dicts inside the `with` block, or `session.expunge(row)` before returning.
+- **Live API calls in UI**: Clicking "Generate article" in the UI hits real Anthropic + fal.ai endpoints (costs money). The pytest suite mocks every boundary, so tests are free.
 
 ## Core Principles
 - **Simplicity First**: Make every change as simple as possible. Impact minimal code.

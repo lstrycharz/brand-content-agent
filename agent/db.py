@@ -14,7 +14,13 @@ def utcnow() -> datetime:
     return datetime.now(timezone.utc).replace(tzinfo=None)
 
 
+# extend_existing=True so Streamlit's hot-reload (which can re-import this
+# module) doesn't error with "Table already defined" on the second pass.
+_TABLE_ARGS = {"extend_existing": True}
+
+
 class Topic(SQLModel, table=True):
+    __table_args__ = _TABLE_ARGS
     id: int | None = Field(default=None, primary_key=True)
     title: str = Field(unique=True, index=True)
     keyword: str
@@ -27,6 +33,7 @@ class Topic(SQLModel, table=True):
 
 
 class Run(SQLModel, table=True):
+    __table_args__ = _TABLE_ARGS
     id: int | None = Field(default=None, primary_key=True)
     run_id: str = Field(unique=True, index=True)
     topic_id: int = Field(foreign_key="topic.id")
@@ -40,6 +47,7 @@ class Run(SQLModel, table=True):
 
 
 class Draft(SQLModel, table=True):
+    __table_args__ = _TABLE_ARGS
     id: int | None = Field(default=None, primary_key=True)
     run_id: str = Field(unique=True, foreign_key="run.run_id")
     file_path: str
@@ -52,6 +60,7 @@ class Draft(SQLModel, table=True):
 
 
 class ResearchCache(SQLModel, table=True):
+    __table_args__ = _TABLE_ARGS
     topic_title: str = Field(primary_key=True)
     search_results: str
     cached_at: datetime = Field(default_factory=utcnow)
@@ -68,7 +77,12 @@ def get_engine(db_path: Path | None = None):
 
         path = db_path or settings.db_path
         path.parent.mkdir(parents=True, exist_ok=True)
-        _engine = create_engine(f"sqlite:///{path}", echo=False)
+        # check_same_thread=False so the Streamlit UI thread and the agent
+        # worker thread can share the connection pool safely.
+        _engine = create_engine(
+            f"sqlite:///{path}", echo=False,
+            connect_args={"check_same_thread": False},
+        )
         SQLModel.metadata.create_all(_engine)
     return _engine
 

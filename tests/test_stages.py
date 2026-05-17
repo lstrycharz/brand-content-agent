@@ -56,6 +56,15 @@ class TestInitStage:
         topic, _ = init.run(topic_id=sample_topics[2].id)
         assert topic.title == "Skincare routine for sensitive skin"
 
+    def test_uses_provided_run_id(self, sample_topics, db_session):
+        from agent.stages import init
+
+        topic, run_id = init.run(run_id="ui-supplied-id-123")
+        assert run_id == "ui-supplied-id-123"
+        run = db_session.exec(select(Run).where(Run.run_id == run_id)).one()
+        assert run.run_id == "ui-supplied-id-123"
+        assert run.topic_id == topic.id
+
 
 # ---------------------------------------------------------------------------
 # Stage 2: Research

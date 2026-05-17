@@ -10,11 +10,14 @@ from agent.db import Run, Topic, session_scope, utcnow
 from agent.progress import bus
 
 
-def run(topic_id: int | None = None) -> tuple[Topic, str]:
+def run(topic_id: int | None = None, run_id: str | None = None) -> tuple[Topic, str]:
     """Select a topic and start a new run.
 
     If `topic_id` is provided, that topic is used regardless of status.
     Otherwise selects the highest-priority pending topic.
+
+    If `run_id` is provided, it is used as the run identifier. This lets the
+    UI subscribe to the progress bus before the agent thread starts.
     """
     with session_scope() as session:
         if topic_id is not None:
@@ -31,7 +34,7 @@ def run(topic_id: int | None = None) -> tuple[Topic, str]:
             if topic is None:
                 raise LookupError("No pending topics available")
 
-        run_id = str(uuid.uuid4())
+        run_id = run_id or str(uuid.uuid4())
         run_row = Run(
             run_id=run_id,
             topic_id=topic.id,
